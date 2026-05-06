@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "locale": "en_US",
+  "platform": "3.12",
+  "metadata": {
+    "appmode": "python_streamlit",
+    "entrypoint": "main.py"
+  },
+  "python": {
+    "version": "3.12.5",
+    "package_manager": {
+      "name": "pip",
+      "version": "24.3.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "main.py": {
+      "checksum": "1c6f7cfb8e0ddd2d71b2e8050c775a5d"
+    },
+    "dr_annotation.py": {
+      "checksum": "4f29a0f4c8d8a9dd71fe5463957952db"
+    },
+    "dr_classifier.py": {
+      "checksum": "d91c32e04ac7c05399604b89adf2dede"
+    },
+    "dr_results.py": {
+      "checksum": "928557abe3b3a83b7a47a6f277b2987c"
+    },
+    "dr_utils.py": {
+      "checksum": "ad88d602b26f081af9c2b759a0154244"
+    },
+    "requirements.txt": {
+      "checksum": "89ec8a1a8386e25afa4a0fea5dd2ae63"
+    },
+    "bayer_logo.png": {
+      "checksum": "08c4205d078c221cea2377590caef56a"
+    },
+    "Nayve/prr2026_pdf.txt": {
+      "checksum": "e6000eda41083041b5fbd02c6561a8ea"
+    },
+    "Nayve/naive_bayes_pdfsFLS.txt": {
+      "checksum": "55e23866337f4b20442df0c020db7f78"
+    },
+    "Nayve/ASR2026_pdf.txt": {
+      "checksum": "ec3f24f50fcafc0fc0c299469896c012"
+    },
+    "Nayve/naive_bayes_pdfsVagem.txt": {
+      "checksum": "21e4d2800835ec1bdfd4bfe4d10a9cce"
+    },
+    "Nayve/naive_bayes_canopyout25pdf.txt": {
+      "checksum": "c7733d49e71b5a888893cfd7aa7fb3ea"
+    },
+    "Nayve/pgr_pdf.txt": {
+      "checksum": "f565f1669a59c51059fcc2f07ec8ae80"
+    },
+    "Nayve/nematodes_pdf.txt": {
+      "checksum": "9513c4cc839704309db27bacfb30b464"
+    },
+    "Nayve/stinkbug_pdf.txt": {
+      "checksum": "40786f4be6ddf433553ee7782746b7d7"
+    }
+  }
+}

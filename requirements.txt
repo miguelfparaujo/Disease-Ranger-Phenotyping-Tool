@@ -1,0 +1,24 @@
+# Disease Ranger — dependências
+# Gerado em 2026-04-24 | Python 3.12
+
+# Interface web
+streamlit>=1.51.0
+
+# Componente de clique nas imagens (modo Interativo)
+streamlit-image-coordinates>=0.4.0
+
+# Visão computacional
+opencv-python>=4.10.0
+Pillow>=11.0.0
+numpy>=1.26.4
+
+# Classificação por pixel
+scikit-learn>=1.5.2
+
+# Análise de plantas (PDF Naive Bayes, colorização)
+plantcv>=4.5.1
+
+# Planilhas de resultados
+pandas>=2.2.3
+openpyxl>=3.1.5
+XlsxWriter>=3.2.9

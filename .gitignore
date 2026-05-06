@@ -1,0 +1,61 @@
+# ============================================================
+# Disease Ranger — .gitignore
+# ============================================================
+
+# Pastas de imagens/dados locais (não fazem parte do deploy)
+build/
+Cropped/
+Images/
+mask-images/
+Nayve_Sampling/
+"New analysis"/
+"Outros arquivos"/
+"Pastas Completas"/
+"Pastas Teste de Imagens"/
+PDFs/
+Phenotyping/
+"Versões anteriores"/
+
+# Arquivos de backup
+*_BACKUP.py
+*.bak
+
+# Script auxiliar de geração (não precisa ir ao repo)
+_gen_manifest.py
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+.eggs/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Temporários / saídas locais
+*.log
+*.tmp
+temp/
+tmp/
