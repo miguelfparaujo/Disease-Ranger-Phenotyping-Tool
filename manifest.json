@@ -3,7 +3,7 @@
   "locale": "en_US",
   "platform": "3.12",
   "metadata": {
-    "appmode": "python_streamlit",
+    "appmode": "python-streamlit",
     "entrypoint": "main.py"
   },
   "python": {
