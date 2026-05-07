@@ -16,7 +16,7 @@
   },
   "files": {
     "main.py": {
-      "checksum": "1c6f7cfb8e0ddd2d71b2e8050c775a5d"
+      "checksum": "60543d55e6eb52151b2fd5ac56f9c7ea"
     },
     "dr_annotation.py": {
       "checksum": "4f29a0f4c8d8a9dd71fe5463957952db"
@@ -35,6 +35,9 @@
     },
     "bayer_logo.png": {
       "checksum": "08c4205d078c221cea2377590caef56a"
+    },
+    "logobranca.png": {
+      "checksum": "95d9e6cbe8ba93956e17e9f216f648a9"
     },
     "Nayve/prr2026_pdf.txt": {
       "checksum": "e6000eda41083041b5fbd02c6561a8ea"
