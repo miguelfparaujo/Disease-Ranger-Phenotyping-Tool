@@ -48,7 +48,8 @@ from dr_annotation import (
 
 st.set_page_config(page_title="Disease Ranger", page_icon="🧬", layout="wide")
 
-_LOGO_PATH = Path(__file__).parent / "bayer_logo.png"
+_LOGO_PATH      = Path(__file__).parent / "bayer_logo.png"
+_LOGO_DARK_PATH = Path(__file__).parent / "logobranca.png"
 
 @st.cache_data(show_spinner=False)
 def _logo_base64() -> str | None:
@@ -59,16 +60,36 @@ def _logo_base64() -> str | None:
     except Exception:
         return None
 
+@st.cache_data(show_spinner=False)
+def _logo_dark_base64() -> str | None:
+    """Lê a logo branca (modo escuro) como base64."""
+    try:
+        with open(_LOGO_DARK_PATH, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return None
+
 
 with st.sidebar:
-    _b64 = _logo_base64()
+    _b64      = _logo_base64()
+    _b64_dark = _logo_dark_base64()
     if _b64 is not None:
-        st.markdown(
-            f'<a href="/" target="_self" title="Back to home">'
-            f'<img src="data:image/png;base64,{_b64}" width="150" '
-            f'style="cursor:pointer; display:block; margin-bottom:6px;"/></a>',
-            unsafe_allow_html=True
-        )
+        if _b64_dark is not None:
+            st.markdown(
+                f'<a href="/" target="_self" title="Back to home" style="display:block; margin-bottom:6px;">'
+                f'<picture>'
+                f'<source media="(prefers-color-scheme: dark)" srcset="data:image/png;base64,{_b64_dark}">'
+                f'<img src="data:image/png;base64,{_b64}" width="150" style="cursor:pointer; display:block;"/>'
+                f'</picture></a>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f'<a href="/" target="_self" title="Back to home">'
+                f'<img src="data:image/png;base64,{_b64}" width="150" '
+                f'style="cursor:pointer; display:block; margin-bottom:6px;"/></a>',
+                unsafe_allow_html=True
+            )
     else:
         if st.button("🏠 Home", use_container_width=True):
             st.session_state.clear()
