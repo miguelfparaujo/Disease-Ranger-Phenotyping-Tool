@@ -366,33 +366,58 @@ if mode == "Single image":
 
 
 else:
-    cols = st.columns([1, 1, 2])
     if _TKINTER_AVAILABLE:
+        cols = st.columns([1, 1, 2])
         if cols[0].button("Select folder"):
             folder = pick_folder()
             if folder:
                 st.session_state.folder = folder
+
+        folder = st.session_state.get("folder")
+        if not folder:
+            st.info("Click 'Select folder' to choose a folder.")
+            st.stop()
+
+        if st.session_state.last_folder_used != folder:
+            st.session_state.selected_files = []
+            st.session_state.last_folder_used = folder
+
+        st.write(f"Selected folder: {folder}")
+        colorized_dir = Path(folder) / "Colorized"
+        colorized_dir.mkdir(parents=True, exist_ok=True)
+
     else:
-        typed = cols[0].text_input(
-            "Folder path", value=st.session_state.get("folder", ""),
-            placeholder="/path/to/images", key="_folder_text"
+        # Modo online: upload de arquivos pelo browser
+        uploaded_files = st.file_uploader(
+            "Select images (select all at once with Ctrl/Cmd+A)",
+            type=["jpg", "jpeg", "png", "bmp"],
+            accept_multiple_files=True,
+            key="_uploader",
         )
-        if typed:
-            st.session_state.folder = typed
+        if not uploaded_files:
+            st.info("Upload one or more images to continue.")
+            st.stop()
 
-    folder = st.session_state.get("folder")
-    if not folder:
-        st.info("Enter a folder path to continue.")
-        st.stop()
+        # Salva arquivos em diretório temporário para processamento
+        new_names = sorted([f.name for f in uploaded_files])
+        if st.session_state.get("_uploaded_names") != new_names:
+            tmp = tempfile.mkdtemp()
+            for uf in uploaded_files:
+                with open(Path(tmp) / uf.name, "wb") as _out:
+                    _out.write(uf.getbuffer())
+            st.session_state.folder = tmp
+            st.session_state._uploaded_names = new_names
+            st.session_state.selected_files = []
+            st.session_state.last_folder_used = None
 
-    if st.session_state.last_folder_used != folder:
-        st.session_state.selected_files = []
-        st.session_state.last_folder_used = folder
+        folder = st.session_state.get("folder")
+        if st.session_state.last_folder_used != folder:
+            st.session_state.selected_files = []
+            st.session_state.last_folder_used = folder
 
-    st.write(f"Selected folder: {folder}")
-
-    colorized_dir = Path(folder) / "Colorized"
-    colorized_dir.mkdir(exist_ok=True)
+        st.write(f"{len(uploaded_files)} image(s) loaded.")
+        colorized_dir = Path(folder) / "Colorized"
+        colorized_dir.mkdir(parents=True, exist_ok=True)
 
     exts = (".jpg", ".jpeg", ".png", ".bmp")
     all_imgs = sorted([str(Path(folder) / f) for f in os.listdir(folder) if f.lower().endswith(exts)])
@@ -577,9 +602,41 @@ else:
                 except Exception:
                     pass
 
-            st.success(f"Colorized images saved at: {colorized_dir}")
-            if excel_ok:
-                st.success(f"Spreadsheets saved at: {csv_path} and {xlsx_path}")
+            if _TKINTER_AVAILABLE:
+                # Modo local: mostra caminhos salvos no disco
+                st.success(f"Colorized images saved at: {colorized_dir}")
+                if excel_ok:
+                    st.success(f"Spreadsheets saved at: {csv_path} and {xlsx_path}")
+                else:
+                    st.warning("Could not save Excel (.xlsx). Install 'openpyxl' or 'xlsxwriter'. CSV was saved.")
+                    st.info(f"CSV saved at: {csv_path}")
             else:
-                st.warning("Could not save Excel (.xlsx). Install 'openpyxl' or 'xlsxwriter'. CSV was saved.")
-                st.info(f"CSV saved at: {csv_path}")
+                # Modo online: botões de download
+                st.success("Processing complete! Download your results below.")
+                csv_bytes = df.to_csv(index=False, sep=';').encode("utf-8")
+                st.download_button(
+                    "⬇ Download results (CSV)",
+                    data=csv_bytes,
+                    file_name=f"results_{options.disease}.csv",
+                    mime="text/csv",
+                )
+                if excel_ok:
+                    with open(xlsx_path, "rb") as _f:
+                        st.download_button(
+                            "⬇ Download results (Excel)",
+                            data=_f.read(),
+                            file_name=f"results_{options.disease}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
+                import zipfile as _zipfile
+                _zip_buf = io.BytesIO()
+                with _zipfile.ZipFile(_zip_buf, "w", _zipfile.ZIP_DEFLATED) as _zf:
+                    for _img_path in colorized_dir.glob("*"):
+                        _zf.write(_img_path, _img_path.name)
+                _zip_buf.seek(0)
+                st.download_button(
+                    "⬇ Download colorized images (ZIP)",
+                    data=_zip_buf,
+                    file_name=f"colorized_{options.disease}.zip",
+                    mime="application/zip",
+                )
