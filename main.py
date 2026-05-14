@@ -23,6 +23,9 @@ import pandas as pd
 try:
     import tkinter as tk
     from tkinter import filedialog
+    # Testa se há display disponível (falha no servidor/online)
+    _root_test = tk.Tk()
+    _root_test.destroy()
     _TKINTER_AVAILABLE = True
 except Exception:
     _TKINTER_AVAILABLE = False
