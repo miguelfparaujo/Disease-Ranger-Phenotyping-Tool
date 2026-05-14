@@ -372,52 +372,26 @@ else:
             folder = pick_folder()
             if folder:
                 st.session_state.folder = folder
-
-        folder = st.session_state.get("folder")
-        if not folder:
-            st.info("Click 'Select folder' to choose a folder.")
-            st.stop()
-
-        if st.session_state.last_folder_used != folder:
-            st.session_state.selected_files = []
-            st.session_state.last_folder_used = folder
-
-        st.write(f"Selected folder: {folder}")
-        colorized_dir = Path(folder) / "Colorized"
-        colorized_dir.mkdir(parents=True, exist_ok=True)
-
     else:
-        # Modo online: upload de arquivos pelo browser
-        uploaded_files = st.file_uploader(
-            "Select images (select all at once with Ctrl/Cmd+A)",
-            type=["jpg", "jpeg", "png", "bmp"],
-            accept_multiple_files=True,
-            key="_uploader",
+        typed = st.text_input(
+            "Folder path", value=st.session_state.get("folder", ""),
+            placeholder="/path/to/images", key="_folder_text"
         )
-        if not uploaded_files:
-            st.info("Upload one or more images to continue.")
-            st.stop()
+        if typed:
+            st.session_state.folder = typed
 
-        # Salva arquivos em diretório temporário para processamento
-        new_names = sorted([f.name for f in uploaded_files])
-        if st.session_state.get("_uploaded_names") != new_names:
-            tmp = tempfile.mkdtemp()
-            for uf in uploaded_files:
-                with open(Path(tmp) / uf.name, "wb") as _out:
-                    _out.write(uf.getbuffer())
-            st.session_state.folder = tmp
-            st.session_state._uploaded_names = new_names
-            st.session_state.selected_files = []
-            st.session_state.last_folder_used = None
+    folder = st.session_state.get("folder")
+    if not folder:
+        st.info("Select or type the folder path to continue.")
+        st.stop()
 
-        folder = st.session_state.get("folder")
-        if st.session_state.last_folder_used != folder:
-            st.session_state.selected_files = []
-            st.session_state.last_folder_used = folder
+    if st.session_state.last_folder_used != folder:
+        st.session_state.selected_files = []
+        st.session_state.last_folder_used = folder
 
-        st.write(f"{len(uploaded_files)} image(s) loaded.")
-        colorized_dir = Path(folder) / "Colorized"
-        colorized_dir.mkdir(parents=True, exist_ok=True)
+    st.write(f"Selected folder: {folder}")
+    colorized_dir = Path(folder) / "Colorized"
+    colorized_dir.mkdir(parents=True, exist_ok=True)
 
     exts = (".jpg", ".jpeg", ".png", ".bmp")
     all_imgs = sorted([str(Path(folder) / f) for f in os.listdir(folder) if f.lower().endswith(exts)])
@@ -506,6 +480,22 @@ else:
             if _sb.exists():
                 scale_global = load_scale_from_tif(str(_sb))
                 break
+
+    # Campo TIF manual (substitui ou complementa o TIF detectado na pasta)
+    uploaded_tif_folder = st.file_uploader(
+        "TIF file for scale calibration (optional — overrides auto-detected)",
+        type=["tif", "tiff"],
+        key="_tif_folder",
+    )
+    if uploaded_tif_folder is not None:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as _tmp_tif:
+            _tmp_tif.write(uploaded_tif_folder.read())
+            scale_global = load_scale_from_tif(_tmp_tif.name)
+
+    if scale_global is not None:
+        st.caption(f"Scale: {scale_global:.6f} cm/px")
+    else:
+        st.caption("Scale: not set (area values will be N/A)")
 
     analyze_btn_label = (
         "Analyze folder and save (Interactive)"

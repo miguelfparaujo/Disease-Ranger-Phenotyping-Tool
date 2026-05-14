@@ -23,7 +23,8 @@ def pdf_classes_from_image(img_bgr, pdf_file):
     """Lê as classes do arquivo PDF classificando um thumbnail pequeno."""
     try:
         thumb = thumbnail_bgr(img_bgr, max_side=128)
-        mask = pcv.naive_bayes_classifier(rgb_img=thumb, pdf_file=pdf_file)
+        thumb_rgb = cv2.cvtColor(thumb, cv2.COLOR_BGR2RGB)
+        mask = pcv.naive_bayes_classifier(rgb_img=thumb_rgb, pdf_file=pdf_file)
         return list(mask.keys())
     except Exception:
         return []
@@ -31,7 +32,8 @@ def pdf_classes_from_image(img_bgr, pdf_file):
 
 def bayes(img_bgr, pdf_file, disease: str):
     """Classifica imagem com Naive Bayes (PDF) e retorna percentuais, mask e denominador."""
-    mask = pcv.naive_bayes_classifier(rgb_img=img_bgr, pdf_file=pdf_file)
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    mask = pcv.naive_bayes_classifier(rgb_img=img_rgb, pdf_file=pdf_file)
     counts = counts_from_mask(mask)
     percentages, denom = percentages_for_disease(disease, counts)
     return percentages, mask, denom
