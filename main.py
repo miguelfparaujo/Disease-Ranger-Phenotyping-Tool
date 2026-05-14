@@ -9,6 +9,7 @@ Modulos:
   dr_annotation.py  - Pagina interativa de anotacao de pontos
 """
 import streamlit as st
+import streamlit.components.v1 as _st_components
 import numpy as np
 import os
 import cv2
@@ -26,6 +27,12 @@ try:
     _TKINTER_AVAILABLE = True
 except ImportError:
     _TKINTER_AVAILABLE = False
+
+# webkitdirectory folder picker component (for online/no-tkinter mode)
+_FOLDER_PICKER_COMPONENT = _st_components.declare_component(
+    "folder_picker",
+    path=str(Path(__file__).parent / "folder_picker_component"),
+)
 
 from dr_utils import (
     load_scale_from_tif, calculate_area, make_key,
@@ -366,22 +373,43 @@ if mode == "Single image":
 
 
 else:
-    _fb_cols = st.columns([1, 3])
     if _TKINTER_AVAILABLE:
+        _fb_cols = st.columns([1, 3])
         if _fb_cols[0].button("Browse folder"):
             _picked = pick_folder()
             if _picked:
                 st.session_state.folder = _picked
-
-    _typed = _fb_cols[1].text_input(
-        "Folder path",
-        value=st.session_state.get("folder", ""),
-        placeholder="/path/to/images  (or use Browse above)",
-        key="_folder_text",
-        label_visibility="collapsed",
-    )
-    if _typed:
-        st.session_state.folder = _typed
+        _typed = _fb_cols[1].text_input(
+            "Folder path",
+            value=st.session_state.get("folder", ""),
+            placeholder="/path/to/images  (or use Browse above)",
+            key="_folder_text",
+            label_visibility="collapsed",
+        )
+        if _typed:
+            st.session_state.folder = _typed
+    else:
+        # Online: webkitdirectory component — opens native OS folder picker in browser
+        _web_files = _FOLDER_PICKER_COMPONENT(key="wkd_picker")
+        if _web_files:
+            _wkd_key = ",".join(sorted(f["name"] for f in _web_files))
+            if st.session_state.get("_wkd_key") != _wkd_key:
+                with st.spinner(f"Loading {len(_web_files)} image(s)..."):
+                    _tmp_dir = tempfile.mkdtemp()
+                    for _wf in _web_files:
+                        with open(Path(_tmp_dir) / _wf["name"], "wb") as _fp:
+                            _fp.write(base64.b64decode(_wf["b64"]))
+                st.session_state["_wkd_key"] = _wkd_key
+                st.session_state.folder = _tmp_dir
+        # Text input as fallback
+        _typed2 = st.text_input(
+            "Or type folder path directly",
+            value=st.session_state.get("folder", ""),
+            placeholder="/path/to/images",
+            key="_folder_text",
+        )
+        if _typed2:
+            st.session_state.folder = _typed2
 
     folder = st.session_state.get("folder")
     if not folder:

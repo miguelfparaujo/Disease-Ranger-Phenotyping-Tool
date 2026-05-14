@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      padding: 6px 2px;
+      background: transparent;
+      color: #262730;
+    }
+    #btn {
+      background: #ff4b4b;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #btn:hover { background: #c73e3e; }
+    #btn:disabled { background: #aaa; cursor: default; }
+    #status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #555;
+      min-height: 18px;
+    }
+    #bar-wrap { display: none; margin-top: 6px; }
+    progress {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      appearance: none;
+    }
+    progress::-webkit-progress-bar  { background: #eee; border-radius: 3px; }
+    progress::-webkit-progress-value{ background: #ff4b4b; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <input id="picker" type="file" webkitdirectory multiple style="display:none" />
+  <button id="btn" onclick="document.getElementById('picker').click()">
+    📁 Select folder
+  </button>
+  <div id="status">No folder selected.</div>
+  <div id="bar-wrap"><progress id="bar" value="0" max="100"></progress></div>
+
+  <script>
+    const IMG_EXTS = new Set(['jpg','jpeg','png','bmp']);
+    const MAX_FILES = 300;
+
+    /* ── Streamlit component protocol ── */
+    function post(type, extra) {
+      window.parent.postMessage({ type, ...extra }, "*");
+    }
+    post("streamlit:componentReady", { apiVersion: 1 });
+    function setHeight() {
+      post("streamlit:setFrameHeight", { height: document.body.scrollHeight + 20 });
+    }
+    setHeight();
+
+    /* ── File picker ── */
+    document.getElementById("picker").addEventListener("change", async function(e) {
+      const btn    = document.getElementById("btn");
+      const status = document.getElementById("status");
+      const barWrap= document.getElementById("bar-wrap");
+      const bar    = document.getElementById("bar");
+
+      const all  = Array.from(e.target.files);
+      const imgs = all.filter(f => IMG_EXTS.has(f.name.split('.').pop().toLowerCase()));
+
+      if (imgs.length === 0) {
+        status.textContent = "⚠ No supported images found (JPG, PNG, BMP).";
+        setHeight();
+        return;
+      }
+      if (imgs.length > MAX_FILES) {
+        status.textContent = `⚠ Too many images (${imgs.length}). Maximum: ${MAX_FILES}.`;
+        setHeight();
+        return;
+      }
+
+      const totalMB = (imgs.reduce((s, f) => s + f.size, 0) / 1048576).toFixed(1);
+      status.textContent = `Reading ${imgs.length} image(s) — ${totalMB} MB…`;
+      barWrap.style.display = "block";
+      btn.disabled = true;
+      setHeight();
+
+      const results = [];
+      for (let i = 0; i < imgs.length; i++) {
+        bar.value = Math.round(((i + 1) / imgs.length) * 100);
+        const f = imgs[i];
+        const b64 = await readBase64(f);
+        results.push({ name: f.name, rel: f.webkitRelativePath, b64 });
+      }
+
+      barWrap.style.display = "none";
+      btn.disabled = false;
+
+      // Folder name = first segment of webkitRelativePath
+      const folderName = imgs[0].webkitRelativePath.split("/")[0] || "folder";
+      status.textContent = `✅ ${imgs.length} image(s) from "${folderName}" (${totalMB} MB)`;
+      setHeight();
+
+      post("streamlit:setComponentValue", { value: results, dataType: "json" });
+    });
+
+    function readBase64(file) {
+      return new Promise(resolve => {
+        const r = new FileReader();
+        r.onload = e => resolve(e.target.result.split(",")[1]);
+        r.readAsDataURL(file);
+      });
+    }
+  </script>
+</body>
+</html>
