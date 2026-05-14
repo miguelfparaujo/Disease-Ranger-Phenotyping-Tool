@@ -23,11 +23,8 @@ import pandas as pd
 try:
     import tkinter as tk
     from tkinter import filedialog
-    # Testa se há display disponível (falha no servidor/online)
-    _root_test = tk.Tk()
-    _root_test.destroy()
     _TKINTER_AVAILABLE = True
-except Exception:
+except ImportError:
     _TKINTER_AVAILABLE = False
 
 from dr_utils import (
@@ -108,99 +105,19 @@ options = Options()
 
 
 def pick_folder():
-    if _TKINTER_AVAILABLE:
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            folder = filedialog.askdirectory()
-            root.destroy()
-            return folder
-        except Exception:
-            pass
-    return None
-
-
-def folder_browser_widget(key: str = "folder_browser") -> "str | None":
-    """
-    Navegador de pastas server-side para modo online.
-    Exibe um painel interativo com navegação por selectbox/botões.
-    Retorna o caminho confirmado pelo usuário ou None.
-    """
-    nav_key  = f"__{key}_nav"
-    show_key = f"__{key}_show"
-
-    btn_label = "📁 Fechar navegador" if st.session_state.get(show_key) else "📁 Navegar pastas"
-    if st.button(btn_label, key=f"{key}_toggle"):
-        st.session_state[show_key] = not st.session_state.get(show_key, False)
-        st.rerun()
-
-    if not st.session_state.get(show_key, False):
+    """Opens a native OS folder dialog. Returns the selected path or None."""
+    if not _TKINTER_AVAILABLE:
         return None
-
-    # Caminho inicial: pasta do app ou home do servidor
-    if nav_key not in st.session_state:
-        st.session_state[nav_key] = str(Path(__file__).parent)
-
-    current = st.session_state[nav_key]
-    if not Path(current).is_dir():
-        st.session_state[nav_key] = str(Path(__file__).parent)
-        current = st.session_state[nav_key]
-
-    with st.container(border=True):
-        st.markdown(f"**📂 `{current}`**")
-
-        col_up, col_home = st.columns(2)
-        parent   = str(Path(current).parent)
-        at_root  = (parent == current)
-
-        if col_up.button("⬆ Pasta acima", key=f"{key}_up", disabled=at_root):
-            st.session_state[nav_key] = parent
-            st.rerun()
-        if col_home.button("🏠 Raiz do app", key=f"{key}_home"):
-            st.session_state[nav_key] = str(Path(__file__).parent)
-            st.rerun()
-
-        # Listar subpastas
-        try:
-            subdirs = sorted(
-                [d for d in Path(current).iterdir() if d.is_dir()],
-                key=lambda d: d.name.lower(),
-            )
-        except (PermissionError, OSError) as _e:
-            st.warning(f"Sem acesso: {_e}")
-            subdirs = []
-
-        if subdirs:
-            chosen = st.selectbox(
-                "Subpastas",
-                options=[d.name for d in subdirs],
-                key=f"{key}_sel",
-                format_func=lambda x: f"📁 {x}",
-                label_visibility="collapsed",
-            )
-            if st.button("Abrir ▶", key=f"{key}_open"):
-                st.session_state[nav_key] = str(Path(current) / chosen)
-                st.rerun()
-        else:
-            st.caption("Nenhuma subpasta encontrada.")
-
-        # Contagem de imagens
-        _img_exts = {".jpg", ".jpeg", ".png", ".bmp"}
-        try:
-            _n = sum(1 for f in Path(current).iterdir()
-                     if f.is_file() and f.suffix.lower() in _img_exts)
-        except OSError:
-            _n = 0
-        if _n:
-            st.success(f"{_n} imagem(ns) encontrada(s) nesta pasta.")
-        else:
-            st.caption("Nenhuma imagem encontrada nesta pasta.")
-
-        if st.button("✅ Usar esta pasta", key=f"{key}_confirm", type="primary"):
-            st.session_state[show_key] = False
-            return current
-
-    return None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)  # bring dialog to front
+        root.focus_force()
+        folder = filedialog.askdirectory(title="Select image folder", parent=root)
+        root.destroy()
+        return folder if folder else None  # askdirectory returns "" on cancel
+    except Exception:
+        return None
 
 
 st.title("🧬 Disease Ranger - Image Analysis")
@@ -449,21 +366,26 @@ if mode == "Single image":
 
 
 else:
+    _fb_cols = st.columns([1, 3])
     if _TKINTER_AVAILABLE:
-        cols = st.columns([1, 1, 2])
-        if cols[0].button("Select folder"):
-            folder = pick_folder()
-            if folder:
-                st.session_state.folder = folder
-    else:
-        # Modo online: navegador de pastas server-side
-        _fb_result = folder_browser_widget(key="fb")
-        if _fb_result:
-            st.session_state.folder = _fb_result
+        if _fb_cols[0].button("Browse folder"):
+            _picked = pick_folder()
+            if _picked:
+                st.session_state.folder = _picked
+
+    _typed = _fb_cols[1].text_input(
+        "Folder path",
+        value=st.session_state.get("folder", ""),
+        placeholder="/path/to/images  (or use Browse above)",
+        key="_folder_text",
+        label_visibility="collapsed",
+    )
+    if _typed:
+        st.session_state.folder = _typed
 
     folder = st.session_state.get("folder")
     if not folder:
-        st.info("Selecione uma pasta para continuar.")
+        st.info("Select a folder to continue.")
         st.stop()
 
     if st.session_state.last_folder_used != folder:
