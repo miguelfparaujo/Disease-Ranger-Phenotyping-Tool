@@ -389,27 +389,24 @@ else:
         if _typed:
             st.session_state.folder = _typed
     else:
-        # Online: webkitdirectory component — opens native OS folder picker in browser
-        _web_files = _FOLDER_PICKER_COMPONENT(key="wkd_picker")
-        if _web_files:
-            _wkd_key = ",".join(sorted(f["name"] for f in _web_files))
-            if st.session_state.get("_wkd_key") != _wkd_key:
-                with st.spinner(f"Loading {len(_web_files)} image(s)..."):
-                    _tmp_dir = tempfile.mkdtemp()
-                    for _wf in _web_files:
-                        with open(Path(_tmp_dir) / _wf["name"], "wb") as _fp:
-                            _fp.write(base64.b64decode(_wf["b64"]))
-                st.session_state["_wkd_key"] = _wkd_key
-                st.session_state.folder = _tmp_dir
-        # Text input as fallback
-        _typed2 = st.text_input(
-            "Or type folder path directly",
-            value=st.session_state.get("folder", ""),
-            placeholder="/path/to/images",
-            key="_folder_text",
+        # Online: upload multiple files via browser
+        _uploaded_files = st.file_uploader(
+            "Select images (use Ctrl+A inside the folder to select all)",
+            type=["jpg", "jpeg", "png", "bmp"],
+            accept_multiple_files=True,
+            key="_uploader",
         )
-        if _typed2:
-            st.session_state.folder = _typed2
+        if _uploaded_files:
+            _new_names = sorted([f.name for f in _uploaded_files])
+            if st.session_state.get("_uploaded_names") != _new_names:
+                _tmp_dir = tempfile.mkdtemp()
+                for _uf in _uploaded_files:
+                    with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
+                        _fp.write(_uf.getbuffer())
+                st.session_state["_uploaded_names"] = _new_names
+                st.session_state.folder = _tmp_dir
+                st.session_state.selected_files = []
+                st.session_state.last_folder_used = None
 
     folder = st.session_state.get("folder")
     if not folder:
