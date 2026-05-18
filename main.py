@@ -373,24 +373,41 @@ if mode == "Single image":
 
 
 else:
-    # Multiple images: upload via browser (works locally and online)
-    _uploaded_files = st.file_uploader(
-        "Select images (Ctrl+A to select all files in a folder)",
-        type=["jpg", "jpeg", "png", "bmp"],
-        accept_multiple_files=True,
-        key="_uploader",
-    )
-    if _uploaded_files:
-        _new_names = sorted([f.name for f in _uploaded_files])
-        if st.session_state.get("_uploaded_names") != _new_names:
-            _tmp_dir = tempfile.mkdtemp()
-            for _uf in _uploaded_files:
-                with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
-                    _fp.write(_uf.getbuffer())
-            st.session_state["_uploaded_names"] = _new_names
-            st.session_state.folder = _tmp_dir
-            st.session_state.selected_files = []
-            st.session_state.last_folder_used = None
+    if _TKINTER_AVAILABLE:
+        # Local: native folder picker
+        _fb_cols = st.columns([1, 3])
+        if _fb_cols[0].button("Browse folder"):
+            _picked = pick_folder()
+            if _picked:
+                st.session_state.folder = _picked
+        _typed = _fb_cols[1].text_input(
+            "Folder path",
+            value=st.session_state.get("folder", ""),
+            placeholder="C:/path/to/images  (or use Browse above)",
+            key="_folder_text",
+            label_visibility="collapsed",
+        )
+        if _typed:
+            st.session_state.folder = _typed
+    else:
+        # Online: upload multiple images via browser
+        _uploaded_files = st.file_uploader(
+            "Select images (Ctrl+A to select all files in a folder)",
+            type=["jpg", "jpeg", "png", "bmp"],
+            accept_multiple_files=True,
+            key="_uploader",
+        )
+        if _uploaded_files:
+            _new_names = sorted([f.name for f in _uploaded_files])
+            if st.session_state.get("_uploaded_names") != _new_names:
+                _tmp_dir = tempfile.mkdtemp()
+                for _uf in _uploaded_files:
+                    with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
+                        _fp.write(_uf.getbuffer())
+                st.session_state["_uploaded_names"] = _new_names
+                st.session_state.folder = _tmp_dir
+                st.session_state.selected_files = []
+                st.session_state.last_folder_used = None
 
     folder = st.session_state.get("folder")
     if not folder:
