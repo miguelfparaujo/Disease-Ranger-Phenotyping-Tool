@@ -136,7 +136,7 @@ options.disease = st.sidebar.selectbox(
 
 classification_mode = st.sidebar.radio("Classification mode", ["Automatic (PDF)", "Interactive (clicks)"])
 
-mode = st.sidebar.radio("Operation mode", ["Single image", "Folder"])
+mode = st.sidebar.radio("Operation mode", ["Single image", "Multiple images"])
 
 st.sidebar.markdown("### Crop (px)")
 crop_top    = st.sidebar.number_input("Top crop (px)", min_value=0, value=0, step=10, key="crop_top")
@@ -373,44 +373,28 @@ if mode == "Single image":
 
 
 else:
-    if _TKINTER_AVAILABLE:
-        _fb_cols = st.columns([1, 3])
-        if _fb_cols[0].button("Browse folder"):
-            _picked = pick_folder()
-            if _picked:
-                st.session_state.folder = _picked
-        _typed = _fb_cols[1].text_input(
-            "Folder path",
-            value=st.session_state.get("folder", ""),
-            placeholder="/path/to/images  (or use Browse above)",
-            key="_folder_text",
-            label_visibility="collapsed",
-        )
-        if _typed:
-            st.session_state.folder = _typed
-    else:
-        # Online: upload multiple files via browser
-        _uploaded_files = st.file_uploader(
-            "Select images (use Ctrl+A inside the folder to select all)",
-            type=["jpg", "jpeg", "png", "bmp"],
-            accept_multiple_files=True,
-            key="_uploader",
-        )
-        if _uploaded_files:
-            _new_names = sorted([f.name for f in _uploaded_files])
-            if st.session_state.get("_uploaded_names") != _new_names:
-                _tmp_dir = tempfile.mkdtemp()
-                for _uf in _uploaded_files:
-                    with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
-                        _fp.write(_uf.getbuffer())
-                st.session_state["_uploaded_names"] = _new_names
-                st.session_state.folder = _tmp_dir
-                st.session_state.selected_files = []
-                st.session_state.last_folder_used = None
+    # Multiple images: upload via browser (works locally and online)
+    _uploaded_files = st.file_uploader(
+        "Select images (Ctrl+A to select all files in a folder)",
+        type=["jpg", "jpeg", "png", "bmp"],
+        accept_multiple_files=True,
+        key="_uploader",
+    )
+    if _uploaded_files:
+        _new_names = sorted([f.name for f in _uploaded_files])
+        if st.session_state.get("_uploaded_names") != _new_names:
+            _tmp_dir = tempfile.mkdtemp()
+            for _uf in _uploaded_files:
+                with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
+                    _fp.write(_uf.getbuffer())
+            st.session_state["_uploaded_names"] = _new_names
+            st.session_state.folder = _tmp_dir
+            st.session_state.selected_files = []
+            st.session_state.last_folder_used = None
 
     folder = st.session_state.get("folder")
     if not folder:
-        st.info("Select a folder to continue.")
+        st.info("Select images to continue.")
         st.stop()
 
     if st.session_state.last_folder_used != folder:
