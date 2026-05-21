@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as _st_components
 import numpy as np
 import os
+import sys
 import cv2
 import tempfile
 import math
@@ -24,7 +25,14 @@ import pandas as pd
 try:
     import tkinter as tk
     from tkinter import filedialog
-    _TKINTER_AVAILABLE = True
+    # Windows e macOS sempre têm display gráfico disponível.
+    # Linux sem DISPLAY (servidor headless) não consegue abrir janelas tkinter.
+    if sys.platform in ("win32", "darwin"):
+        _TKINTER_AVAILABLE = True
+    else:
+        _TKINTER_AVAILABLE = bool(
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        )
 except ImportError:
     _TKINTER_AVAILABLE = False
 
@@ -399,7 +407,10 @@ else:
         )
         if _uploaded_files:
             _new_names = sorted([f.name for f in _uploaded_files])
-            if st.session_state.get("_uploaded_names") != _new_names:
+            _existing = st.session_state.get("folder")
+            _folder_ok = bool(_existing and Path(_existing).is_dir()
+                               and any(Path(_existing).iterdir()))
+            if st.session_state.get("_uploaded_names") != _new_names or not _folder_ok:
                 _tmp_dir = tempfile.mkdtemp()
                 for _uf in _uploaded_files:
                     with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
