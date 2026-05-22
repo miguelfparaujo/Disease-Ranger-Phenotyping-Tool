@@ -30,9 +30,9 @@ try:
     if sys.platform in ("win32", "darwin"):
         _TKINTER_AVAILABLE = True
     else:
-        _TKINTER_AVAILABLE = bool(
-            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
-        )
+        # On Linux (cloud/server), the tkinter dialog would open on the server's
+        # display – invisible to the browser user. Always use the browser picker.
+        _TKINTER_AVAILABLE = False
 except ImportError:
     _TKINTER_AVAILABLE = False
 
@@ -398,23 +398,19 @@ else:
         if _typed:
             st.session_state.folder = _typed
     else:
-        # Online: upload multiple images via browser
-        _uploaded_files = st.file_uploader(
-            "Select images (Ctrl+A to select all files in a folder)",
-            type=["jpg", "jpeg", "png", "bmp"],
-            accept_multiple_files=True,
-            key="_uploader",
-        )
-        if _uploaded_files:
-            _new_names = sorted([f.name for f in _uploaded_files])
+        # Online: webkitdirectory folder-picker component (select a whole folder)
+        _component_data = _FOLDER_PICKER_COMPONENT(key="folder_picker", default=None)
+        if _component_data:
+            _new_names = sorted([f["name"] for f in _component_data])
             _existing = st.session_state.get("folder")
             _folder_ok = bool(_existing and Path(_existing).is_dir()
                                and any(Path(_existing).iterdir()))
             if st.session_state.get("_uploaded_names") != _new_names or not _folder_ok:
                 _tmp_dir = tempfile.mkdtemp()
-                for _uf in _uploaded_files:
-                    with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
-                        _fp.write(_uf.getbuffer())
+                for _fd in _component_data:
+                    img_bytes = base64.b64decode(_fd["b64"])
+                    with open(Path(_tmp_dir) / _fd["name"], "wb") as _fp:
+                        _fp.write(img_bytes)
                 st.session_state["_uploaded_names"] = _new_names
                 st.session_state.folder = _tmp_dir
                 st.session_state.selected_files = []
