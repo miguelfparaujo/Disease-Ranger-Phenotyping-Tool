@@ -9,7 +9,6 @@ Modulos:
   dr_annotation.py  - Pagina interativa de anotacao de pontos
 """
 import streamlit as st
-import streamlit.components.v1 as _st_components
 import numpy as np
 import os
 import sys
@@ -35,12 +34,6 @@ try:
         _TKINTER_AVAILABLE = False
 except ImportError:
     _TKINTER_AVAILABLE = False
-
-# webkitdirectory folder picker component (for online/no-tkinter mode)
-_FOLDER_PICKER_COMPONENT = _st_components.declare_component(
-    "folder_picker",
-    path=str(Path(__file__).parent / "folder_picker_component"),
-)
 
 from dr_utils import (
     load_scale_from_tif, calculate_area, make_key,
@@ -398,19 +391,23 @@ else:
         if _typed:
             st.session_state.folder = _typed
     else:
-        # Online: webkitdirectory folder-picker component (select a whole folder)
-        _component_data = _FOLDER_PICKER_COMPONENT(key="folder_picker", default=None)
-        if _component_data:
-            _new_names = sorted([f["name"] for f in _component_data])
+        # Online: native multi-file uploader (select all files in a folder with Ctrl+A)
+        _uploaded_files = st.file_uploader(
+            "Select images — navigate to your folder and press Ctrl+A to select all",
+            type=["jpg", "jpeg", "png", "bmp"],
+            accept_multiple_files=True,
+            key="_uploader",
+        )
+        if _uploaded_files:
+            _new_names = sorted([f.name for f in _uploaded_files])
             _existing = st.session_state.get("folder")
             _folder_ok = bool(_existing and Path(_existing).is_dir()
                                and any(Path(_existing).iterdir()))
             if st.session_state.get("_uploaded_names") != _new_names or not _folder_ok:
                 _tmp_dir = tempfile.mkdtemp()
-                for _fd in _component_data:
-                    img_bytes = base64.b64decode(_fd["b64"])
-                    with open(Path(_tmp_dir) / _fd["name"], "wb") as _fp:
-                        _fp.write(img_bytes)
+                for _uf in _uploaded_files:
+                    with open(Path(_tmp_dir) / _uf.name, "wb") as _fp:
+                        _fp.write(_uf.getbuffer())
                 st.session_state["_uploaded_names"] = _new_names
                 st.session_state.folder = _tmp_dir
                 st.session_state.selected_files = []
