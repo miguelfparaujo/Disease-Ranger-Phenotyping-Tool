@@ -251,9 +251,16 @@ if mode == "Single image":
 
     if classification_mode == "Automatic (PDF)":
         if pdf_file and os.path.exists(pdf_file):
-            percentages, mask, _ = bayes(
-                cv2.cvtColor(img_rgb_cropped, cv2.COLOR_RGB2BGR), pdf_file, options.disease
-            )
+            # Cache: só reclassifica se imagem, PDF, doença ou crop mudarem
+            _bayes_key = (image_key, pdf_file, options.disease, crop_tuple)
+            if st.session_state.get("_bayes_cache_key") != _bayes_key:
+                with st.spinner("Classifying image..."):
+                    _p, _m, _d = bayes(
+                        cv2.cvtColor(img_rgb_cropped, cv2.COLOR_RGB2BGR), pdf_file, options.disease
+                    )
+                st.session_state["_bayes_cache_key"] = _bayes_key
+                st.session_state["_bayes_cache_val"] = (_p, _m, _d)
+            percentages, mask, _ = st.session_state["_bayes_cache_val"]
         else:
             st.error("Disease PDF file not found.")
             st.stop()
@@ -264,19 +271,32 @@ if mode == "Single image":
         )
         classes_with_pts = [c for c in interactive_classes if len(samples_all.get(c, [])) > 0]
         if len(classes_with_pts) >= 2:
-            train_samp = {c: samples_all[c] for c in classes_with_pts}
-            model = train_classifier(train_samp)
-            model._use_xy = use_xy_features
-            model._classes_to_train = classes_with_pts
-            mask = classify_image_with_xy(img_rgb_cropped, model, classes_with_pts)
-            counts = counts_from_mask(mask)
-            percentages, _ = percentages_for_disease(options.disease, counts)
+            # Cache RF: só retreina se pontos, crop, doença ou use_xy mudarem
+            _pts_sig = tuple((c, len(pts_per_class.get(c, []))) for c in interactive_classes)
+            _rf_key  = (image_key, _pts_sig, use_xy_features, crop_tuple, options.disease)
+            if st.session_state.get("_rf_cache_key") != _rf_key:
+                train_samp = {c: samples_all[c] for c in classes_with_pts}
+                model = train_classifier(train_samp)
+                model._use_xy = use_xy_features
+                model._classes_to_train = classes_with_pts
+                _mask_rf = classify_image_with_xy(img_rgb_cropped, model, classes_with_pts)
+                _counts  = counts_from_mask(_mask_rf)
+                _pcts, _ = percentages_for_disease(options.disease, _counts)
+                st.session_state["_rf_cache_key"] = _rf_key
+                st.session_state["_rf_cache_val"] = (_pcts, _mask_rf)
+            percentages, mask = st.session_state["_rf_cache_val"]
         else:
             if use_pdf_fallback and pdf_file and os.path.exists(pdf_file):
                 st.info("Insufficient points (minimum 2 classes). Using PDF as fallback.")
-                percentages, mask, _ = bayes(
-                    cv2.cvtColor(img_rgb_cropped, cv2.COLOR_RGB2BGR), pdf_file, options.disease
-                )
+                _bayes_key = (image_key, pdf_file, options.disease, crop_tuple)
+                if st.session_state.get("_bayes_cache_key") != _bayes_key:
+                    with st.spinner("Classifying image..."):
+                        _p, _m, _d = bayes(
+                            cv2.cvtColor(img_rgb_cropped, cv2.COLOR_RGB2BGR), pdf_file, options.disease
+                        )
+                    st.session_state["_bayes_cache_key"] = _bayes_key
+                    st.session_state["_bayes_cache_val"] = (_p, _m, _d)
+                percentages, mask, _ = st.session_state["_bayes_cache_val"]
             else:
                 st.warning("Insufficient points and PDF fallback disabled or unavailable.")
                 st.stop()
@@ -461,12 +481,23 @@ else:
         st.rerun()
 
     seed_path    = (st.session_state.selected_files[0] if st.session_state.selected_files else all_imgs[0])
-    pil_seed     = Image.open(seed_path).convert("RGB")
-    img_bgr_seed = cv2.cvtColor(np.ascontiguousarray(np.array(pil_seed).astype(np.uint8)), cv2.COLOR_RGB2BGR)
 
+    # Cache seed image BGR — evita reabrir arquivo a cada rerun
+    _seed_bgr_key = f"_seed_bgr_{make_key('', seed_path)}"
+    if _seed_bgr_key not in st.session_state:
+        _pil_seed = Image.open(seed_path).convert("RGB")
+        st.session_state[_seed_bgr_key] = cv2.cvtColor(
+            np.ascontiguousarray(np.array(_pil_seed).astype(np.uint8)), cv2.COLOR_RGB2BGR
+        )
+    img_bgr_seed = st.session_state[_seed_bgr_key]
+
+    # Cache classes do PDF — pcv.naive_bayes_classifier é caro; resultado é estável por pdf_file
+    _pdf_cls_key = f"_pdf_cls_{pdf_file}"
     interactive_classes = []
     if pdf_file and os.path.exists(pdf_file):
-        interactive_classes = pdf_classes_from_image(img_bgr_seed, pdf_file)
+        if _pdf_cls_key not in st.session_state:
+            st.session_state[_pdf_cls_key] = pdf_classes_from_image(img_bgr_seed, pdf_file)
+        interactive_classes = st.session_state.get(_pdf_cls_key, [])
     if not interactive_classes:
         interactive_classes = ["background", "plant", "lesion"]
 
@@ -481,9 +512,22 @@ else:
         cols_row  = st.columns(len(row_items))
         for col, p in zip(cols_row, row_items):
             with col:
-                try:
-                    pil_thumb = Image.open(p).convert("RGB")
-                except Exception:
+                # Cache thumbnail de exibição (256 px) em session_state — evita I/O a cada rerun
+                _disp_key = f"_disp_thumb_{make_key('', p)}"
+                if _disp_key not in st.session_state:
+                    try:
+                        _pil_full = Image.open(p).convert("RGB")
+                        _tw, _th = _pil_full.size
+                        _tscale = min(1.0, 256 / max(_tw, _th))
+                        if _tscale < 1.0:
+                            _pil_full = _pil_full.resize(
+                                (int(_tw * _tscale), int(_th * _tscale)), Image.LANCZOS
+                            )
+                        st.session_state[_disp_key] = _pil_full
+                    except Exception:
+                        st.session_state[_disp_key] = None
+                pil_thumb = st.session_state[_disp_key]
+                if pil_thumb is None:
                     st.warning(f"Failed to open: {os.path.basename(p)}")
                     continue
                 col.image(pil_thumb, caption=os.path.basename(p), width='stretch')
@@ -491,7 +535,12 @@ else:
                 st.caption(f"Points collected: {pts_count}")
                 btn_key = make_key("annotate", p)
                 if st.button("Annotate", key=btn_key):
-                    img_rgb_cur = np.ascontiguousarray(np.array(pil_thumb).astype(np.uint8))
+                    # Para anotação, carrega imagem em resolução completa
+                    try:
+                        _pil_anno = Image.open(p).convert("RGB")
+                        img_rgb_cur = np.ascontiguousarray(np.array(_pil_anno).astype(np.uint8))
+                    except Exception:
+                        img_rgb_cur = np.ascontiguousarray(np.array(pil_thumb).astype(np.uint8))
                     enter_annotation("folder", p, img_rgb_cur, interactive_classes)
                     if p not in st.session_state.selected_files:
                         st.session_state.selected_files.append(p)

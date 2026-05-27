@@ -68,6 +68,7 @@ def make_skip_callback(image_key):
 # =====================================================
 # PÁGINA DE ANOTAÇÃO
 # =====================================================
+@st.fragment
 def annotation_page(active_class_key):
     """Renderiza a UI completa de anotação de pontos."""
     image_key = st.session_state.annotate_image_key
@@ -75,7 +76,7 @@ def annotation_page(active_class_key):
         st.error("Annotation image not found.")
         if st.button("Back"):
             exit_annotation()
-            st.rerun()
+            st.rerun(scope="app")
         st.stop()
 
     img_rgb = st.session_state.images_cache[image_key]
@@ -84,7 +85,7 @@ def annotation_page(active_class_key):
         st.error("Could not retrieve classes for annotation of this image.")
         if st.button("Back"):
             exit_annotation()
-            st.rerun()
+            st.rerun(scope="app")
         st.stop()
 
     ensure_points_struct(image_key, classes_for_image)
@@ -153,27 +154,41 @@ def annotation_page(active_class_key):
     if arrow_cols[0].button("←", key=f"left_{image_key}"):
         st.session_state[pan_x_ctrl_key] = max(0, int(st.session_state[pan_x_ctrl_key]) - step_val)
         st.session_state[skip_key] = True
-        st.rerun()
     if arrow_cols[1].button("→", key=f"right_{image_key}"):
         st.session_state[pan_x_ctrl_key] = min(max(0, w-1), int(st.session_state[pan_x_ctrl_key]) + step_val)
         st.session_state[skip_key] = True
-        st.rerun()
     if arrow_cols[2].button("↑", key=f"up_{image_key}"):
         st.session_state[pan_y_ctrl_key] = max(0, int(st.session_state[pan_y_ctrl_key]) - step_val)
         st.session_state[skip_key] = True
-        st.rerun()
     if arrow_cols[3].button("↓", key=f"down_{image_key}"):
         st.session_state[pan_y_ctrl_key] = min(max(0, h-1), int(st.session_state[pan_y_ctrl_key]) + step_val)
         st.session_state[skip_key] = True
-        st.rerun()
 
     pan_x_cur = int(st.session_state[pan_x_ctrl_key])
     pan_y_cur = int(st.session_state[pan_y_ctrl_key])
-    canvas_img, mapping = fit_to_square_display(
-        img_rgb, st.session_state[zoom_key], pan_x_cur, pan_y_cur,
-        canvas_size=st.session_state[canvas_key]
-    )
-    canvas_marked = draw_markers_on_display(canvas_img, st.session_state.points[image_key], mapping)
+
+    # Cache canvas base (cv2.resize) — só recomputa quando view params mudam
+    _base_params = (image_key, int(st.session_state[zoom_key] * 1000),
+                    pan_x_cur, pan_y_cur, int(st.session_state[canvas_key]))
+    _base_cached = st.session_state.get("_anno_canvas_base")
+    if _base_cached is None or _base_cached[0] != _base_params:
+        canvas_img, mapping = fit_to_square_display(
+            img_rgb, st.session_state[zoom_key], pan_x_cur, pan_y_cur,
+            canvas_size=st.session_state[canvas_key]
+        )
+        st.session_state["_anno_canvas_base"] = (_base_params, canvas_img, mapping)
+    else:
+        canvas_img, mapping = _base_cached[1], _base_cached[2]
+
+    # Cache canvas marcado — só redesenha quando pontos mudam
+    _pts_sig = tuple((c, len(pts)) for c, pts in st.session_state.points[image_key].items())
+    _marked_params = (_base_params, _pts_sig)
+    _marked_cached = st.session_state.get("_anno_canvas_marked")
+    if _marked_cached is None or _marked_cached[0] != _marked_params:
+        canvas_marked = draw_markers_on_display(canvas_img, st.session_state.points[image_key], mapping)
+        st.session_state["_anno_canvas_marked"] = (_marked_params, canvas_marked)
+    else:
+        canvas_marked = _marked_cached[1]
 
     coords = streamlit_image_coordinates(canvas_marked, key=f"coords_{image_key}",
                                           width=st.session_state[canvas_key])
@@ -235,7 +250,7 @@ def annotation_page(active_class_key):
     cols_footer = st.columns(2)
     if cols_footer[0].button("Save"):
         exit_annotation()
-        st.rerun()
+        st.rerun(scope="app")
     if cols_footer[1].button("Cancel"):
         exit_annotation()
-        st.rerun()
+        st.rerun(scope="app")
