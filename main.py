@@ -315,8 +315,8 @@ if mode == "Single image":
 
         colorized_rgb = cv2.cvtColor(colorized_bgr, cv2.COLOR_BGR2RGB)
         col1, col2 = st.columns(2)
-        col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", width='stretch')
-        col2.image(colorized_rgb, caption="Classification (numbered pods)", width='stretch')
+        col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", use_container_width=True)
+        col2.image(colorized_rgb, caption="Classification (numbered pods)", use_container_width=True)
         st.download_button("Download colorized image (PNG)", data=png_bytes,
                            file_name=download_filename, mime="image/png")
 
@@ -367,8 +367,8 @@ if mode == "Single image":
 
         colorized_rgb = cv2.cvtColor(colorized_bgr, cv2.COLOR_BGR2RGB)
         col1, col2 = st.columns(2)
-        col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", width='stretch')
-        col2.image(colorized_rgb, caption="Classification (Stink Bug)", width='stretch')
+        col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", use_container_width=True)
+        col2.image(colorized_rgb, caption="Classification (Stink Bug)", use_container_width=True)
         st.download_button("Download colorized image (PNG)", data=png_bytes,
                            file_name=download_filename, mime="image/png")
         st.subheader("Results (Stink Bug)")
@@ -385,8 +385,8 @@ if mode == "Single image":
         areas = {f"{c} area (cm2)": round(calculate_area(mask[c], scale), 2) for c in mask}
         colorized_rgb = cv2.cvtColor(colorized_bgr, cv2.COLOR_BGR2RGB)
         col1, col2 = st.columns(2)
-        col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", width='stretch')
-        col2.image(colorized_rgb, caption="Classification (cropped)", width='stretch')
+        col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", use_container_width=True)
+        col2.image(colorized_rgb, caption="Classification (cropped)", use_container_width=True)
         st.download_button("Download colorized image (PNG)", data=png_bytes,
                            file_name=download_filename, mime="image/png")
         st.subheader("Results")
@@ -530,7 +530,7 @@ else:
                 if pil_thumb is None:
                     st.warning(f"Failed to open: {os.path.basename(p)}")
                     continue
-                col.image(pil_thumb, caption=os.path.basename(p), width='stretch')
+                col.image(pil_thumb, caption=os.path.basename(p), use_container_width=True)
                 pts_count = sum(len(st.session_state.points[p][c]) for c in interactive_classes)
                 st.caption(f"Points collected: {pts_count}")
                 btn_key = make_key("annotate", p)

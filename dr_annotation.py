@@ -8,8 +8,10 @@ Responsabilidades:
 
 Requer: dr_utils.py
 """
+import io
 import streamlit as st
 import numpy as np
+from PIL import Image as _PILImage
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 from dr_utils import (
@@ -19,6 +21,14 @@ from dr_utils import (
     draw_marker_on_canvas,
     class_color_bgr,
 )
+
+
+class _PreEncodedImage:
+    """Wraps pre-encoded JPEG bytes to skip re-encoding inside streamlit_image_coordinates."""
+    def __init__(self, data: bytes):
+        self._data = data
+    def save(self, buf, **kwargs):
+        buf.write(self._data)
 
 
 # =====================================================
@@ -52,6 +62,11 @@ def enter_annotation(mode_key, image_key, img_rgb, classes_for_image):
     st.session_state.images_cache[image_key] = np.ascontiguousarray(img_rgb.copy().astype(np.uint8))
     st.session_state.classes_map[image_key] = classes_for_image
     ensure_points_struct(image_key, classes_for_image)
+    # Clear stale component state to prevent spurious point on re-entry
+    for _stale_key in (f"coords_{image_key}", f"last_added_orig_{image_key}",
+                       "_anno_canvas_base", "_anno_canvas_marked",
+                       "_anno_canvas_jpeg", "_anno_canvas_jpeg_params"):
+        st.session_state.pop(_stale_key, None)
 
 
 def exit_annotation():
@@ -190,8 +205,24 @@ def annotation_page(active_class_key):
     else:
         canvas_marked = _marked_cached[1]
 
-    coords = streamlit_image_coordinates(canvas_marked, key=f"coords_{image_key}",
-                                          width=st.session_state[canvas_key])
+    # Cache JPEG encoding — skip re-encoding on reruns where canvas hasn't changed
+    # PNG compress_level=0 (default) = ~2.6 MB/click; JPEG quality=75 = ~80 KB/click (30× less)
+    _jpeg_params_key = "_anno_canvas_jpeg_params"
+    if st.session_state.get(_jpeg_params_key) != _marked_params:
+        _buf = io.BytesIO()
+        _PILImage.fromarray(canvas_marked).save(_buf, format="JPEG", quality=75)
+        st.session_state["_anno_canvas_jpeg"] = _buf.getvalue()
+        st.session_state[_jpeg_params_key] = _marked_params
+    _canvas_src = _PreEncodedImage(st.session_state["_anno_canvas_jpeg"])
+
+    coords = streamlit_image_coordinates(
+        _canvas_src,
+        key=f"coords_{image_key}",
+        width=st.session_state[canvas_key],
+        image_format="JPEG",
+        jpeg_quality=75,
+        cursor="crosshair",
+    )
 
     undo_cols = st.columns(3)
     if undo_cols[0].button("Undo (active class)", key=f"undo_cls_{image_key}"):
@@ -221,8 +252,11 @@ def annotation_page(active_class_key):
     if undo_cols[2].button("Clear all points", key=f"clear_{image_key}"):
         st.session_state.points[image_key] = {c: [] for c in classes_for_image}
         st.session_state.click_log[image_key] = []
-        st.session_state[last_added_key] = None
-        st.rerun()
+        # Clear stale state so no spurious point is added after reset
+        for _ck in (last_added_key, f"coords_{image_key}",
+                    "_anno_canvas_marked", "_anno_canvas_jpeg", "_anno_canvas_jpeg_params"):
+            st.session_state.pop(_ck, None)
+        st.rerun(scope="fragment")
 
     if st.session_state[skip_key]:
         st.session_state[skip_key] = False
@@ -231,15 +265,13 @@ def annotation_page(active_class_key):
             xd = float(coords["x"])
             yd = float(coords["y"])
             orig = display_to_original_coords(xd, yd, mapping, img_rgb.shape)
-            if orig is None:
-                st.info("Click outside image area. Adjust pan/zoom and try again.")
-            else:
+            if orig is not None:
                 x, y = orig
                 if st.session_state[last_added_key] != (x, y):
                     st.session_state.points[image_key][active_class].append((x, y))
                     st.session_state.click_log[image_key].append((active_class, (x, y)))
                     st.session_state[last_added_key] = (x, y)
-                    st.success(f"[{image_key}] Point ({x}, {y}) added to class {active_class}")
+                    st.toast(f"Ponto adicionado em **{active_class}**: ({x}, {y})", icon="✅")
 
     _, total_pts = samples_ready_total(st.session_state.points[image_key])
     st.write(f"Total clicks: {total_pts}")
