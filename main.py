@@ -171,7 +171,7 @@ if classification_mode == "Interactive (clicks)":
 pdf_files = {
     "PRR": "Nayve/prr2026_pdf.txt",
     "FLS": "Nayve/naive_bayes_pdfsFLS.txt",
-    "TLS": "Nayve/ASR2026_pdf.txt",
+    "TLS": "Nayve/naive_bayes_TLS0825pdf.txt",
     "Vagem": "Nayve/naive_bayes_pdfsVagem.txt",
     "CHR": "Nayve/naive_bayes_canopyout25pdf.txt",
     "PGR": "Nayve/pgr_pdf.txt",
