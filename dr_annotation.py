@@ -83,7 +83,6 @@ def make_skip_callback(image_key):
 # =====================================================
 # PÁGINA DE ANOTAÇÃO
 # =====================================================
-@st.fragment
 def annotation_page(active_class_key):
     """Renderiza a UI completa de anotação de pontos."""
     image_key = st.session_state.annotate_image_key
@@ -256,7 +255,7 @@ def annotation_page(active_class_key):
         for _ck in (last_added_key, f"coords_{image_key}",
                     "_anno_canvas_marked", "_anno_canvas_jpeg", "_anno_canvas_jpeg_params"):
             st.session_state.pop(_ck, None)
-        st.rerun(scope="fragment")
+        st.rerun()
 
     if st.session_state[skip_key]:
         st.session_state[skip_key] = False
@@ -282,7 +281,7 @@ def annotation_page(active_class_key):
     cols_footer = st.columns(2)
     if cols_footer[0].button("Save"):
         exit_annotation()
-        st.rerun(scope="app")
+        st.rerun()
     if cols_footer[1].button("Cancel"):
         exit_annotation()
-        st.rerun(scope="app")
+        st.rerun()
