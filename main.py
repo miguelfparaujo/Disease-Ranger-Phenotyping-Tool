@@ -193,6 +193,7 @@ for _key, _default in [
     ("last_folder_used", None),
     ("single_scale", None),
     ("last_single_image_key", None),
+    ("_folder_downloads", None),
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
@@ -690,40 +691,57 @@ else:
                     pass
 
             if _TKINTER_AVAILABLE:
-                # Modo local: mostra caminhos salvos no disco
                 st.success(f"Colorized images saved at: {colorized_dir}")
                 if excel_ok:
                     st.success(f"Spreadsheets saved at: {csv_path} and {xlsx_path}")
                 else:
                     st.warning("Could not save Excel (.xlsx). Install 'openpyxl' or 'xlsxwriter'. CSV was saved.")
                     st.info(f"CSV saved at: {csv_path}")
-            else:
-                # Modo online: botões de download
-                st.success("Processing complete! Download your results below.")
-                csv_bytes = df.to_csv(index=False, sep=';').encode("utf-8")
-                st.download_button(
-                    "⬇ Download results (CSV)",
-                    data=csv_bytes,
-                    file_name=f"results_{options.disease}.csv",
-                    mime="text/csv",
-                )
-                if excel_ok:
-                    with open(xlsx_path, "rb") as _f:
-                        st.download_button(
-                            "⬇ Download results (Excel)",
-                            data=_f.read(),
-                            file_name=f"results_{options.disease}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        )
-                import zipfile as _zipfile
-                _zip_buf = io.BytesIO()
-                with _zipfile.ZipFile(_zip_buf, "w", _zipfile.ZIP_DEFLATED) as _zf:
-                    for _img_path in colorized_dir.glob("*"):
-                        _zf.write(_img_path, _img_path.name)
-                _zip_buf.seek(0)
-                st.download_button(
-                    "⬇ Download colorized images (ZIP)",
-                    data=_zip_buf,
-                    file_name=f"colorized_{options.disease}.zip",
-                    mime="application/zip",
-                )
+
+            # Prepara dados para download (persiste no session_state para sobreviver ao rerun)
+            import zipfile as _zipfile
+            _csv_bytes = df.to_csv(index=False, sep=';').encode("utf-8")
+            _xlsx_bytes = None
+            if excel_ok:
+                with open(xlsx_path, "rb") as _f:
+                    _xlsx_bytes = _f.read()
+            _zip_buf = io.BytesIO()
+            with _zipfile.ZipFile(_zip_buf, "w", _zipfile.ZIP_DEFLATED) as _zf:
+                for _img_path in colorized_dir.glob("*"):
+                    _zf.write(_img_path, _img_path.name)
+            _zip_buf.seek(0)
+            st.session_state["_folder_downloads"] = {
+                "disease": options.disease,
+                "csv":     _csv_bytes,
+                "xlsx":    _xlsx_bytes,
+                "zip":     _zip_buf.read(),
+            }
+
+    # --- Botões de download (fora do bloco do botão para sobreviver ao rerun) ---
+    _dl = st.session_state.get("_folder_downloads")
+    if _dl:
+        st.divider()
+        st.subheader("⬇ Download results")
+        _dl_cols = st.columns(3)
+        _dl_cols[0].download_button(
+            "📄 Results (CSV)",
+            data=_dl["csv"],
+            file_name=f"results_{_dl['disease']}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        if _dl["xlsx"]:
+            _dl_cols[1].download_button(
+                "📊 Results (Excel)",
+                data=_dl["xlsx"],
+                file_name=f"results_{_dl['disease']}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        _dl_cols[2].download_button(
+            "🖼 Colorized images (ZIP)",
+            data=_dl["zip"],
+            file_name=f"colorized_{_dl['disease']}.zip",
+            mime="application/zip",
+            use_container_width=True,
+        )
