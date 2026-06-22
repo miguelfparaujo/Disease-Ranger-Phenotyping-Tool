@@ -17,6 +17,7 @@ import tempfile
 import math
 import io
 import base64
+import time
 from PIL import Image
 from pathlib import Path
 
@@ -591,6 +592,9 @@ else:
         n = len(files_to_process)
         progress_bar = st.progress(0)
         status = st.empty()
+        eta_text  = st.empty()
+        _t_start  = time.monotonic()
+        _times    = []
 
         use_pdf_mode = True
         model = None
@@ -655,7 +659,17 @@ else:
 
             except Exception as e:
                 st.warning(f"Error processing {os.path.basename(p)}: {e}")
+
+            _elapsed = time.monotonic() - _t_start
+            _times.append(_elapsed / i)
+            _avg_per_img = sum(_times[-10:]) / len(_times[-10:])
+            _remaining   = _avg_per_img * (n - i)
             progress_bar.progress(i / n)
+            if i < n:
+                _m, _s = divmod(int(_remaining), 60)
+                eta_text.caption(f"⏱ Tempo restante estimado: {_m}m {_s:02d}s  ({i}/{n} imagens)")
+            else:
+                eta_text.caption(f"✅ Concluído em {int(_elapsed // 60)}m {int(_elapsed % 60):02d}s  ({n}/{n} imagens)")
 
         status.write("Done.")
 
