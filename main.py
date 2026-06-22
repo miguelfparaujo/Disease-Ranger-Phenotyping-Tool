@@ -168,15 +168,16 @@ if classification_mode == "Interactive (clicks)":
         help="If fewer than 2 classes have points, automatically uses PDF in folder analysis."
     )
 
+_NAYVE_DIR = Path(__file__).parent / "Nayve"
 pdf_files = {
-    "PRR": "Nayve/prr2026_pdf.txt",
-    "FLS": "Nayve/naive_bayes_pdfsFLS.txt",
-    "TLS": "Nayve/naive_bayes_TLS0825pdf.txt",
-    "Vagem": "Nayve/naive_bayes_pdfsVagem.txt",
-    "CHR": "Nayve/naive_bayes_canopyout25pdf.txt",
-    "PGR": "Nayve/pgr_pdf.txt",
-    "SCN": "Nayve/nematodes_pdf.txt",
-    "Stink Bug": "Nayve/stinkbug_pdf.txt",
+    "PRR":       str(_NAYVE_DIR / "prr2026_pdf.txt"),
+    "FLS":       str(_NAYVE_DIR / "naive_bayes_pdfsFLS.txt"),
+    "TLS":       str(_NAYVE_DIR / "naive_bayes_TLS0825pdf.txt"),
+    "Vagem":     str(_NAYVE_DIR / "naive_bayes_pdfsVagem.txt"),
+    "CHR":       str(_NAYVE_DIR / "naive_bayes_canopyout25pdf.txt"),
+    "PGR":       str(_NAYVE_DIR / "pgr_pdf.txt"),
+    "SCN":       str(_NAYVE_DIR / "nematodes_pdf.txt"),
+    "Stink Bug": str(_NAYVE_DIR / "stinkbug_pdf.txt"),
 }
 pdf_file = pdf_files.get(options.disease)
 
