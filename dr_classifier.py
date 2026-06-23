@@ -17,23 +17,143 @@ from dr_utils import crop_bounds, thumbnail_bgr
 
 
 # =====================================================
+# PRR — auxiliares de pós-processamento espacial
+# (portado do version08_09.py para restaurar precisão da versão offline)
+# =====================================================
+def _estimate_root_cut(mask_plant):
+    """Estima a linha de corte entre parte aérea e raiz pela última linha com planta consistente."""
+    projection = np.sum(mask_plant > 0, axis=1)
+    if np.max(projection) == 0:
+        return mask_plant.shape[0] // 2
+    norm = projection / np.max(projection)
+    for i in range(len(norm) - 1, -1, -1):
+        if norm[i] > 0.25:
+            return i
+    return mask_plant.shape[0] // 2
+
+
+def _enforce_root_connectivity(mask_root, bottom_ratio=0.08):
+    """Mantém apenas regiões de raiz conectadas à faixa inferior da imagem."""
+    h, w = mask_root.shape
+    band_start = int(h * (1 - bottom_ratio))
+    num_labels, labels = cv2.connectedComponents(mask_root.astype(np.uint8), connectivity=8)
+    if num_labels <= 1:
+        return mask_root
+    valid = np.zeros_like(mask_root, dtype=np.uint8)
+    bottom_labels = np.unique(labels[band_start:h, :])
+    bottom_labels = bottom_labels[bottom_labels != 0]
+    for lbl in bottom_labels:
+        valid[labels == lbl] = 1
+    return valid
+
+
+def _find_closest_class(color, class_colors):
+    """Retorna a classe cuja cor de referência é a mais próxima da cor fornecida."""
+    closest = None
+    min_dist = float('inf')
+    for cls, ref in class_colors.items():
+        dist = float(np.linalg.norm(np.array(color, dtype=np.float32) - np.array(ref, dtype=np.float32)))
+        if dist < min_dist:
+            min_dist = dist
+            closest = cls
+    return closest
+
+
+def _apply_prr_spatial_processing(img_bgr, mask):
+    """
+    Aplica pós-processamento espacial específico de PRR:
+    - Separa parte aérea (plant/lesion) da raiz usando corte dinâmico
+    - Reforça conectividade da raiz à faixa inferior
+    - Reclassifica pixels não atribuídos pelo Naive Bayes
+    """
+    h = img_bgr.shape[0]
+
+    # --- Linha de corte dinâmica ---
+    if 'plant' in mask:
+        kernel = np.ones((9, 9), np.uint8)
+        plant_clean = cv2.morphologyEx(mask['plant'], cv2.MORPH_CLOSE, kernel)
+        cut_line = _estimate_root_cut(plant_clean)
+    else:
+        cut_line = h // 2
+
+    cut_line = int(np.clip(cut_line, h * 0.15, h * 0.85))
+    cut_line = max(cut_line, int(h * 0.4))
+
+    mask_upper = np.zeros(img_bgr.shape[:2], dtype=np.uint8)
+    mask_upper[:cut_line, :] = 1
+    mask_lower = np.zeros(img_bgr.shape[:2], dtype=np.uint8)
+    mask_lower[cut_line:, :] = 1
+
+    # --- Restrições espaciais por classe ---
+    if 'raiz' in mask:
+        mask['raiz'] = mask['raiz'] * mask_lower
+        mask['raiz'] = cv2.erode(mask['raiz'], np.ones((3, 3), np.uint8), iterations=1)
+        raiz_before = mask['raiz'].copy()
+        mask['raiz'] = _enforce_root_connectivity(mask['raiz'])
+        if np.count_nonzero(mask['raiz']) < 0.1 * np.count_nonzero(raiz_before):
+            mask['raiz'] = raiz_before
+
+    if 'lesion' in mask:
+        mask['lesion'] = mask['lesion'] * mask_upper
+
+    # fallback: se raiz ficou vazia, usa pixels escuros abaixo do corte
+    if 'raiz' in mask and np.count_nonzero(mask['raiz']) == 0:
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        dark_mask = (hsv[:, :, 2] < 90)
+        mask['raiz'] = (dark_mask & mask_lower.astype(bool)).astype(np.uint8)
+
+    # --- Reclassificação de pixels não atribuídos ---
+    total_classified = np.zeros(img_bgr.shape[:2], dtype=bool)
+    for m in mask.values():
+        total_classified |= m.astype(bool)
+    unclassified = ~total_classified
+
+    if np.any(unclassified):
+        # Cores de referência em BGR (ordem dos canais do cv2)
+        lower_colors = {'raiz': (19, 69, 139), 'plant': (0, 128, 0), 'background': (255, 255, 255)}
+        upper_colors = {'lesion': (0, 255, 255), 'plant': (0, 128, 0), 'background': (255, 255, 255)}
+
+        unc_lower = unclassified & mask_lower.astype(bool)
+        if np.any(unc_lower):
+            temp = unc_lower.astype(np.uint8)
+            region_color = cv2.mean(img_bgr, mask=temp)[:3]
+            cls = _find_closest_class(region_color, lower_colors)
+            mask.setdefault(cls, np.zeros(img_bgr.shape[:2], dtype=np.uint8))
+            mask[cls] = np.clip(mask[cls].astype(np.int32) + temp, 0, 1).astype(np.uint8)
+
+        unc_upper = unclassified & mask_upper.astype(bool)
+        if np.any(unc_upper):
+            temp = unc_upper.astype(np.uint8)
+            region_color = cv2.mean(img_bgr, mask=temp)[:3]
+            cls = _find_closest_class(region_color, upper_colors)
+            mask.setdefault(cls, np.zeros(img_bgr.shape[:2], dtype=np.uint8))
+            mask[cls] = np.clip(mask[cls].astype(np.int32) + temp, 0, 1).astype(np.uint8)
+
+    return mask
+
+
+# =====================================================
 # PDF (Naive Bayes PlantCV)
 # =====================================================
 def pdf_classes_from_image(img_bgr, pdf_file):
     """Lê as classes do arquivo PDF classificando um thumbnail pequeno."""
     try:
         thumb = thumbnail_bgr(img_bgr, max_side=128)
-        thumb_rgb = cv2.cvtColor(thumb, cv2.COLOR_BGR2RGB)
-        mask = pcv.naive_bayes_classifier(rgb_img=thumb_rgb, pdf_file=pdf_file)
+        # PlantCV usa cv2.COLOR_BGR2HSV internamente — passa BGR diretamente
+        mask = pcv.naive_bayes_classifier(rgb_img=thumb, pdf_file=pdf_file)
         return list(mask.keys())
     except Exception:
         return []
 
 
 def bayes(img_bgr, pdf_file, disease: str):
-    """Classifica imagem com Naive Bayes (PDF) e retorna percentuais, mask e denominador."""
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    mask = pcv.naive_bayes_classifier(rgb_img=img_rgb, pdf_file=pdf_file)
+    """Classifica imagem com Naive Bayes (PDF) e retorna percentuais, mask e denominador.
+    PlantCV converte internamente com cv2.COLOR_BGR2HSV, portanto img_bgr é passado
+    diretamente sem converter para RGB — os PDFs foram treinados com imagens BGR.
+    """
+    mask = pcv.naive_bayes_classifier(rgb_img=img_bgr, pdf_file=pdf_file)
+    if disease == "PRR":
+        mask = _apply_prr_spatial_processing(img_bgr, mask)
     counts = counts_from_mask(mask)
     percentages, denom = percentages_for_disease(disease, counts)
     return percentages, mask, denom
@@ -174,6 +294,7 @@ def counts_from_mask(mask: dict) -> dict:
 def percentages_for_disease(disease: str, counts: dict) -> tuple:
     """
     Retorna (dict_percentuais, denominador) seguindo regras por doença:
+    - PRR:         denom = plant + raiz + background; background% calculado sobre total de pixels
     - Vagem / FLS: denom = healthy + lesion
     - TLS:         denom = healthy + clorosis + lesion
     - Outros:      denom = total de todos os pixels classificados
@@ -182,7 +303,21 @@ def percentages_for_disease(disease: str, counts: dict) -> tuple:
     h = counts.get("healthy", 0)
     l = counts.get("lesion", 0)
     c = counts.get("clorosis", 0)
-    if d in ("Vagem", "FLS"):
+    if d == "PRR":
+        plant  = counts.get("plant", 0)
+        raiz   = counts.get("raiz", 0)
+        bg     = counts.get("background", 0)
+        total_px = sum(counts.values())
+        denom  = plant + raiz + bg
+        if denom == 0:
+            return {"background (%)": 0.0, "plant (%)": 0.0, "raiz (%)": 0.0, "lesion (%)": 0.0}, denom
+        return {
+            "background (%)": round(100 * bg / total_px, 2) if total_px else 0.0,
+            "plant (%)":      round(100 * plant / denom, 2),
+            "raiz (%)":       round(100 * raiz  / denom, 2),
+            "lesion (%)":     round(100 * l     / denom, 2),
+        }, denom
+    elif d in ("Vagem", "FLS"):
         denom = h + l
         if denom == 0:
             return {"healthy (%)": 0.0, "lesion (%)": 0.0}, denom
