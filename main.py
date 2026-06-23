@@ -135,9 +135,9 @@ options.disease = st.sidebar.selectbox(
     ["PRR", "TLS", "FLS", "Vagem", "PGR", "CHR", "SCN", "Stink Bug"]
 )
 
-classification_mode = st.sidebar.radio("Classification mode", ["Automatic (PDF)", "Interactive (clicks)"])
+classification_mode = st.sidebar.radio("Classification mode", ["Automatic (PDF)", "Interactive (clicks)"], key="classification_mode")
 
-mode = st.sidebar.radio("Operation mode", ["Single image", "Multiple images"])
+mode = st.sidebar.radio("Operation mode", ["Single image", "Multiple images"], key="operation_mode")
 
 st.sidebar.markdown("### Crop (px)")
 crop_top    = st.sidebar.number_input("Top crop (px)", min_value=0, value=0, step=10, key="crop_top")
@@ -252,56 +252,57 @@ if mode == "Single image":
     if classification_mode == "Automatic (PDF)":
         if pdf_file and os.path.exists(pdf_file):
             # Cache: só reclassifica se imagem, PDF, doença ou crop mudarem
+            # colorize() também é cacheado aqui para evitar reprocessamento a cada rerun
             _bayes_key = (image_key, pdf_file, options.disease, crop_tuple)
             if st.session_state.get("_bayes_cache_key") != _bayes_key:
                 with st.spinner("Classifying image..."):
                     _p, _m, _d = bayes(
                         cv2.cvtColor(img_rgb_cropped, cv2.COLOR_RGB2BGR), pdf_file, options.disease
                     )
+                    _colorized_auto = np.ascontiguousarray(colorize(_m, options.disease).astype(np.uint8))
                 st.session_state["_bayes_cache_key"] = _bayes_key
-                st.session_state["_bayes_cache_val"] = (_p, _m, _d)
-            percentages, mask, _ = st.session_state["_bayes_cache_val"]
+                st.session_state["_bayes_cache_val"] = (_p, _m, _d, _colorized_auto)
+            percentages, mask, _, colorized_bgr = st.session_state["_bayes_cache_val"]
         else:
             st.error("Disease PDF file not found.")
             st.stop()
     else:
+        # Interactive mode: nunca executa análise automática.
+        # O usuário deve marcar os pontos e clicar em 'Run Interactive Analysis'.
         pts_per_class    = st.session_state.points[image_key]
         samples_all      = collect_samples_from_points_with_xy(
             img_rgb, pts_per_class, use_xy=use_xy_features, crop=crop_tuple
         )
         classes_with_pts = [c for c in interactive_classes if len(samples_all.get(c, [])) > 0]
-        if len(classes_with_pts) >= 2:
-            # Cache RF: só retreina se pontos, crop, doença ou use_xy mudarem
-            _pts_sig = tuple((c, len(pts_per_class.get(c, []))) for c in interactive_classes)
-            _rf_key  = (image_key, _pts_sig, use_xy_features, crop_tuple, options.disease)
-            if st.session_state.get("_rf_cache_key") != _rf_key:
-                train_samp = {c: samples_all[c] for c in classes_with_pts}
-                model = train_classifier(train_samp)
-                model._use_xy = use_xy_features
-                model._classes_to_train = classes_with_pts
-                _mask_rf = classify_image_with_xy(img_rgb_cropped, model, classes_with_pts)
-                _counts  = counts_from_mask(_mask_rf)
-                _pcts, _ = percentages_for_disease(options.disease, _counts)
+        if len(classes_with_pts) < 2:
+            st.info(
+                "Mark points for at least 2 classes using 'Mark class', "
+                "then click 'Run Interactive Analysis'."
+            )
+            st.stop()
+        _pts_sig = tuple((c, len(pts_per_class.get(c, []))) for c in interactive_classes)
+        _rf_key  = (image_key, _pts_sig, use_xy_features, crop_tuple, options.disease)
+        if st.session_state.get("_rf_cache_key") != _rf_key:
+            # Nenhum resultado cacheado para os pontos atuais — aguarda clique do usuário
+            st.info(
+                f"Points collected for {len(classes_with_pts)} class(es). "
+                "Click below to run the classification."
+            )
+            if st.button("🔍 Run Interactive Analysis"):
+                with st.spinner("Training classifier and classifying image..."):
+                    train_samp = {c: samples_all[c] for c in classes_with_pts}
+                    model = train_classifier(train_samp)
+                    model._use_xy = use_xy_features
+                    model._classes_to_train = classes_with_pts
+                    _mask_rf = classify_image_with_xy(img_rgb_cropped, model, classes_with_pts)
+                    _counts  = counts_from_mask(_mask_rf)
+                    _pcts, _ = percentages_for_disease(options.disease, _counts)
+                    _colorized_rf = np.ascontiguousarray(colorize(_mask_rf, options.disease).astype(np.uint8))
                 st.session_state["_rf_cache_key"] = _rf_key
-                st.session_state["_rf_cache_val"] = (_pcts, _mask_rf)
-            percentages, mask = st.session_state["_rf_cache_val"]
-        else:
-            if use_pdf_fallback and pdf_file and os.path.exists(pdf_file):
-                st.info("Insufficient points (minimum 2 classes). Using PDF as fallback.")
-                _bayes_key = (image_key, pdf_file, options.disease, crop_tuple)
-                if st.session_state.get("_bayes_cache_key") != _bayes_key:
-                    with st.spinner("Classifying image..."):
-                        _p, _m, _d = bayes(
-                            cv2.cvtColor(img_rgb_cropped, cv2.COLOR_RGB2BGR), pdf_file, options.disease
-                        )
-                    st.session_state["_bayes_cache_key"] = _bayes_key
-                    st.session_state["_bayes_cache_val"] = (_p, _m, _d)
-                percentages, mask, _ = st.session_state["_bayes_cache_val"]
-            else:
-                st.warning("Insufficient points and PDF fallback disabled or unavailable.")
-                st.stop()
-
-    colorized_bgr = np.ascontiguousarray(colorize(mask, options.disease).astype(np.uint8))
+                st.session_state["_rf_cache_val"] = (_pcts, _mask_rf, _colorized_rf)
+                st.rerun()
+            st.stop()
+        percentages, mask, colorized_bgr = st.session_state["_rf_cache_val"]
 
     base_name = uploaded.name if uploaded is not None else "single_image.png"
     base_root, base_ext = os.path.splitext(base_name)
@@ -310,10 +311,12 @@ if mode == "Single image":
     if options.disease == "Vagem":
         components        = split_vagens_components(mask)
         components_sorted = sort_components_left_to_right(components)
-        draw_vagem_boxes(colorized_bgr, components_sorted)
-        png_bytes = bgr_to_png_bytes(colorized_bgr)
+        # draw_vagem_boxes modifica in-place; copiar para não corromper o cache
+        colorized_bgr_vagem = colorized_bgr.copy()
+        draw_vagem_boxes(colorized_bgr_vagem, components_sorted)
+        png_bytes = bgr_to_png_bytes(colorized_bgr_vagem)
 
-        colorized_rgb = cv2.cvtColor(colorized_bgr, cv2.COLOR_BGR2RGB)
+        colorized_rgb = cv2.cvtColor(colorized_bgr_vagem, cv2.COLOR_BGR2RGB)
         col1, col2 = st.columns(2)
         col1.image(Image.fromarray(img_rgb_cropped), caption="Original (cropped)", use_container_width=True)
         col2.image(colorized_rgb, caption="Classification (numbered pods)", use_container_width=True)
