@@ -8,10 +8,8 @@ Responsabilidades:
 
 Requer: dr_utils.py
 """
-import io
 import streamlit as st
 import numpy as np
-from PIL import Image as _PILImage
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 from dr_utils import (
@@ -21,14 +19,6 @@ from dr_utils import (
     draw_marker_on_canvas,
     class_color_bgr,
 )
-
-
-class _PreEncodedImage:
-    """Wraps pre-encoded JPEG bytes to skip re-encoding inside streamlit_image_coordinates."""
-    def __init__(self, data: bytes):
-        self._data = data
-    def save(self, buf, **kwargs):
-        buf.write(self._data)
 
 
 # =====================================================
@@ -83,7 +73,6 @@ def make_skip_callback(image_key):
 # =====================================================
 # PÁGINA DE ANOTAÇÃO
 # =====================================================
-@st.fragment
 def annotation_page(active_class_key):
     """Renderiza a UI completa de anotação de pontos."""
     image_key = st.session_state.annotate_image_key
@@ -205,23 +194,10 @@ def annotation_page(active_class_key):
     else:
         canvas_marked = _marked_cached[1]
 
-    # Cache JPEG encoding — skip re-encoding on reruns where canvas hasn't changed
-    # PNG compress_level=0 (default) = ~2.6 MB/click; JPEG quality=75 = ~80 KB/click (30× less)
-    _jpeg_params_key = "_anno_canvas_jpeg_params"
-    if st.session_state.get(_jpeg_params_key) != _marked_params:
-        _buf = io.BytesIO()
-        _PILImage.fromarray(canvas_marked).save(_buf, format="JPEG", quality=75)
-        st.session_state["_anno_canvas_jpeg"] = _buf.getvalue()
-        st.session_state[_jpeg_params_key] = _marked_params
-    _canvas_src = _PreEncodedImage(st.session_state["_anno_canvas_jpeg"])
-
     coords = streamlit_image_coordinates(
-        _canvas_src,
+        canvas_marked,
         key=f"coords_{image_key}",
         width=st.session_state[canvas_key],
-        image_format="JPEG",
-        jpeg_quality=75,
-        cursor="crosshair",
     )
 
     undo_cols = st.columns(3)
@@ -253,10 +229,9 @@ def annotation_page(active_class_key):
         st.session_state.points[image_key] = {c: [] for c in classes_for_image}
         st.session_state.click_log[image_key] = []
         # Clear stale state so no spurious point is added after reset
-        for _ck in (last_added_key, f"coords_{image_key}",
-                    "_anno_canvas_marked", "_anno_canvas_jpeg", "_anno_canvas_jpeg_params"):
+        for _ck in (last_added_key, f"coords_{image_key}", "_anno_canvas_marked"):
             st.session_state.pop(_ck, None)
-        st.rerun(scope="fragment")
+        st.rerun()
 
     if st.session_state[skip_key]:
         st.session_state[skip_key] = False
