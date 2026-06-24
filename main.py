@@ -79,6 +79,21 @@ def _logo_dark_base64() -> str | None:
         return None
 
 
+# ── ANNOTATION MODE: early exit — skips logo, crop inputs, caption overhead ─
+if st.session_state.get("annotate_mode") is not None:
+    with st.sidebar:
+        if st.button("🏠 Home", use_container_width=True, key="_home_anno"):
+            st.session_state.clear()
+            st.rerun()
+    _ak = (
+        "active_class_single" if st.session_state.annotate_mode == "single"
+        else "active_class_folder"
+    )
+    annotation_page(_ak)
+    st.stop()
+# ── END EARLY ANNOTATION CHECK ──────────────────────────────────────────────
+
+
 with st.sidebar:
     _b64      = _logo_base64()
     _b64_dark = _logo_dark_base64()
@@ -197,14 +212,6 @@ for _key, _default in [
 ]:
     if _key not in st.session_state:
         st.session_state[_key] = _default
-
-if st.session_state.annotate_mode is not None:
-    active_class_key = (
-        "active_class_single" if st.session_state.annotate_mode == "single"
-        else "active_class_folder"
-    )
-    annotation_page(active_class_key)
-    st.stop()
 
 if mode == "Single image":
     uploaded     = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg", "bmp"], key="single_uploader")

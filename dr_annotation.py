@@ -51,7 +51,7 @@ def enter_annotation(mode_key, image_key, img_rgb, classes_for_image):
     st.session_state.classes_map[image_key] = classes_for_image
     ensure_points_struct(image_key, classes_for_image)
     # Clear stale component state to prevent spurious point on re-entry
-    for _stale_key in (f"coords_{image_key}", f"last_added_orig_{image_key}"):
+    for _stale_key in (f"coords_{image_key}", f"last_display_click_{image_key}"):
         st.session_state.pop(_stale_key, None)
 
 
@@ -163,23 +163,24 @@ def annotation_page(active_class_key):
     if undo_cols[2].button("Clear all points", key=f"clear_{image_key}"):
         st.session_state.points[image_key] = {c: [] for c in classes_for_image}
         st.session_state.click_log[image_key] = []
-        st.session_state.pop(f"last_added_orig_{image_key}", None)
+        st.session_state.pop(f"last_display_click_{image_key}", None)
         st.rerun()
 
     if coords is not None and "x" in coords and "y" in coords:
         xd = float(coords["x"])
         yd = float(coords["y"])
-        orig = display_to_original_coords(xd, yd, mapping, img_rgb.shape)
-        if orig is not None:
-            x, y = orig
-            _last_key = f"last_added_orig_{image_key}"
-            if st.session_state.get(_last_key) != (x, y):
+        _display_key = f"last_display_click_{image_key}"
+        if st.session_state.get(_display_key) != (xd, yd):
+            orig = display_to_original_coords(xd, yd, mapping, img_rgb.shape)
+            if orig is not None:
+                x, y = orig
                 st.session_state.points[image_key][active_class].append((x, y))
                 st.session_state.click_log[image_key].append((active_class, (x, y)))
-                st.session_state[_last_key] = (x, y)
+                st.session_state[_display_key] = (xd, yd)
                 st.success(f"Point added to **{active_class}**: ({x}, {y})")
-        else:
-            st.info("Click outside the image area. Adjust pan/zoom and try again.")
+            else:
+                st.session_state[_display_key] = (xd, yd)
+                st.info("Click outside the image area. Adjust pan/zoom and try again.")
 
     _, total_pts = samples_ready_total(st.session_state.points[image_key])
     st.write(f"Total clicks: {total_pts}")
