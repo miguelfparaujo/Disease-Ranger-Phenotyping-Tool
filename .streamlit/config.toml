@@ -1,0 +1,14 @@
+[server]
+# Posit Connect/Cloud run behind a reverse proxy that does not forward
+# the XSRF token correctly — disabling this prevents the HTTP 400 on upload.
+enableXsrfProtection = false
+
+# Required for cloud deployments (no local browser to open).
+headless = true
+
+# Maximum upload size in MB (default 200).
+# 4096 MB = 4 GB — needed for large image folders.
+# NOTE: Posit Connect also enforces its own server-side limit (Applications.MaxRequestSize).
+# A Posit Connect admin must set that value to >= 4096 MB as well, otherwise
+# uploads will still be rejected at the proxy level regardless of this setting.
+maxUploadSize = 4096
